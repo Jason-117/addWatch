@@ -243,6 +243,7 @@ async function sendTelegramOne(chatId: string, text: string) {
           chat_id: chatId,
           text,
           link_preview_options: { is_disabled: true },
+          parse_mode: "HTML",
         }),
         signal: AbortSignal.timeout(15000),
       });
@@ -292,7 +293,7 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
     `To：${tx.to}`,
     `交易哈希：${tx.id}`,
     `转账时间: ${trcTime}`,
-    `查看详情：https://tronscan.org/#/transaction/${tx.id}`,
+    `<a href="https://tronscan.org/#/transaction/${tx.id}">交易详情</a>`,
   );
   const title = anomalies.length ? "异常交易提醒" : "新的 TRC-20 交易";
   const body = lines.join("\n");
