@@ -33,8 +33,8 @@ const ORDER_HEADERS = jsonEnv<Record<string, string>>("ORDER_HEADERS", {});
 const ORDER_NAME_REGEX = new RegExp(env("ORDER_NAME_REGEX") || "用户名[：:]\\s*(\\S+)");
 const ORDER_TIME_REGEX = new RegExp(env("ORDER_TIME_REGEX") || "时间[：:]\\s*(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})");
 
-const TG_BOT_TOKEN = env("TG_BOT_TOKEN");
-const TG_CHAT_IDS = env("TG_CHAT_IDS").split(",").map((s) => s.trim()).filter(Boolean);
+const TELEGRAM_BOT_TOKEN = env("TG_BOT_TOKEN");
+const TELEGRAM_CHAT_IDS = env("TG_CHAT_IDS").split(",").map((s) => s.trim()).filter(Boolean);
 const IMPORT_TOKEN = env("IMPORT_TOKEN");
 
 const OFFICIAL_USDT_TRC20_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
