@@ -286,13 +286,13 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
   }
   lines.push(
     `平台：${LABELS.get(watch) ?? "非监控地址"}`,
-    isNewUser ? `用户名：${name} 新用户` : `用户名:${name}`,
+    isNewUser ? `用户名：${name} 新用户` : `用户名：${name}`,
     `金额：${amountStr(tx.value, tx.decimals) ?? tx.value} ${tx.symbol || "TOKEN"}`,
     `系统处理时间：${order?.time ?? null}`,
     isFirstPayment ? `From：${tx.from}  首次付款` : `From：${tx.from}`,
     `To：${tx.to}`,
     `交易哈希：${tx.id}`,
-    `转账时间: ${trcTime}`,
+    `转账时间： ${trcTime}`,
     `<a href="https://tronscan.org/#/transaction/${tx.id}">交易详情</a>`,
   );
   const title = anomalies.length ? "异常交易提醒" : "";
