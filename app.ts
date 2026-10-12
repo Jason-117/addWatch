@@ -29,10 +29,9 @@ const ORDER_URL = env("ORDER_URL");
 const ORDER_PARAMS = jsonEnv<Record<string, string>>("ORDER_PARAMS", {});
 const ORDER_HEADERS = jsonEnv<Record<string, string>>("ORDER_HEADERS", {});
 
-// 用户名[：:]\\s*(\\S+)
-const ORDER_NAME_REGEX = new RegExp(env("ORDER_NAME_REGEX"), "");
-// 时间[：:]\\s*(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})
-const ORDER_TIME_REGEX = new RegExp(env("ORDER_TIME_REGEX"), "");
+
+const ORDER_NAME_REGEX = new RegExp(env("ORDER_NAME_REGEX") || "用户名[：:]\\s*(\\S+)");
+const ORDER_TIME_REGEX = new RegExp(env("ORDER_TIME_REGEX") || "时间[：:]\\s*(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})");
 
 // Resend
 const RESEND_API_KEY = env("RESEND_API_KEY");
@@ -167,6 +166,30 @@ function officialRisk(info: any): string[] {
 const tsHeaders = (): HeadersInit =>
   TRONSCAN_API_KEY ? { "TRON-PRO-API-KEY": TRONSCAN_API_KEY } : {};
 
+async function tsFetch(url: string | URL, tries = 3): Promise<Response> {
+  for (let i = 1; ; i++) {
+    const r = await fetch(url, { headers: tsHeaders(), signal: AbortSignal.timeout(15000) });
+    if (r.status !== 429 || i >= tries) return r;
+    await r.body?.cancel();
+    const ra = Number(r.headers.get("retry-after"));
+    const wait = Math.min(ra > 0 ? ra * 1000 : 1000 * 2 ** i, 10000);
+    console.log(`[TronScan 429] ${wait}ms 后重试 (${i}/${tries})`);
+    await sleep(wait);
+  }
+}
+
+async function fetchInfo(id: string): Promise<any> {
+  try {
+    const r = await tsFetch(
+      `https://apilist.tronscanapi.com/api/transaction-info?hash=${id}`,
+    );
+    return r.ok ? (await r.json()) ?? {} : {};
+  } catch (e) {
+    console.log(`[官方风险信息查询失败] ${id}: ${e}`);
+    return {};
+  }
+}
+
 async function fetchTransfers(addr: string, startTs: number): Promise<Tx[]> {
   const u = new URL("https://apilist.tronscanapi.com/api/token_trc20/transfers");
   u.search = new URLSearchParams({
@@ -176,23 +199,10 @@ async function fetchTransfers(addr: string, startTs: number): Promise<Tx[]> {
     relatedAddress: addr,
     start_timestamp: String(startTs),
   }).toString();
-  const r = await fetch(u, { headers: tsHeaders(), signal: AbortSignal.timeout(15000) });
+  const r = await tsFetch(u);
   if (!r.ok) throw new Error(`tronscan transfers ${r.status}`);
   const data = await r.json();
   return (data.token_transfers ?? []).map(normalize);
-}
-
-async function fetchInfo(id: string): Promise<any> {
-  try {
-    const r = await fetch(
-      `https://apilist.tronscanapi.com/api/transaction-info?hash=${id}`,
-      { headers: tsHeaders(), signal: AbortSignal.timeout(15000) },
-    );
-    return r.ok ? (await r.json()) ?? {} : {};
-  } catch (e) {
-    console.log(`[官方风险信息查询失败] ${id}: ${e}`);
-    return {};
-  }
 }
 
 async function lookupOrder(id: string): Promise<Order | null> {
@@ -218,7 +228,6 @@ async function lookupOrder(id: string): Promise<Order | null> {
     const time = text.match(ORDER_TIME_REGEX)?.[1] ?? null;
     return name ? { name, time } : null;
   } catch (e) {
-    console.log(`[订单查询失败] ${id}: ${e}`);
     return null;
   }
 }
@@ -239,7 +248,6 @@ async function sendMail(title: string, body: string) {
       if (r.ok) return;
       throw new Error(`${r.status} ${await r.text()}`);
     } catch (e) {
-      console.log(`[邮件第 ${i}/3 次失败] ${e}`);
       if (i === 3) throw e;
       await sleep(2000);
     }
@@ -272,7 +280,6 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
   );
   const title = anomalies.length ? "异常交易提醒" : "新的 TRC-20 交易";
   const body = lines.join("\n");
-  console.log(`\n发现新交易：\n${body}\n`);
 
   await sendMail(title, body);
 
@@ -286,7 +293,6 @@ async function pollAddress(addr: string) {
   const cur = (await kv.get<number>(["cursor", addr])).value;
   if (cur == null) {
     await kv.set(["cursor", addr], Date.now());
-    console.log(`[初始化] ${addr} 游标已设置`);
     return;
   }
 
@@ -333,12 +339,18 @@ async function processPending() {
 }
 
 Deno.cron("poll-tronscan", "* * * * *", async () => {
-  const results = await Promise.allSettled([
-    processPending(),
-    ...WATCH_ADDRESSES.map(pollAddress),
-  ]);
-  for (const r of results) {
-    if (r.status === "rejected") console.log(`[本轮出错] ${r.reason}`);
+  try {
+    await processPending();
+  } catch (e) {
+    console.log(`[pending 出错] ${e}`);
+  }
+  for (const addr of WATCH_ADDRESSES) {
+    try {
+      await pollAddress(addr);
+    } catch (e) {
+      console.log(`[${addr} 本轮出错] ${e}`);
+    }
+    await sleep(300);
   }
 });
 
