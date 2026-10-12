@@ -245,12 +245,14 @@ async function sendTelegramOne(chatId: string, text: string) {
           link_preview_options: { is_disabled: true },
           parse_mode: "HTML",
           reply_markup: {
-            [
-              {
-                text: "查看交易详情",
-                url: `https://tronscan.org/#/transaction/${tx.id}`,
-              },
-            ]
+            inline_keyboard: [
+              [
+                {
+                  text: "查看交易详情",
+                  url: `https://tronscan.org/#/transaction/${tx.id}`,
+                },
+              ],
+            ],
           },
         }),
         signal: AbortSignal.timeout(15000),
