@@ -241,7 +241,7 @@ async function sendTelegramOne(chatId: string, text: string) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: chatId,
-          text,
+          text: `交易哈希：<code>${tx.id}</code>`,
           link_preview_options: { is_disabled: true },
           parse_mode: "HTML",
         }),
