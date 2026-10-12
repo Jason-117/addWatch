@@ -284,7 +284,7 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
     lines.push("检测到以下异常，请仔细核实，谨防诈骗：", ...anomalies, "");
   }
   lines.push(
-    `监控地址：${watch}  ${LABELS.get(watch) ?? "非监控地址"}`,
+    `平台：${LABELS.get(watch) ?? "非监控地址"}`,
     isNewUser ? `用户名：${name} 新用户` : `用户名:${name}`,
     `金额：${amountStr(tx.value, tx.decimals) ?? tx.value} ${tx.symbol || "TOKEN"}`,
     `系统处理时间：${order?.time ?? null}`,
