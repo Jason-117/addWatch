@@ -295,7 +295,7 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
     `转账时间: ${trcTime}`,
     `<a href="https://tronscan.org/#/transaction/${tx.id}">交易详情</a>`,
   );
-  const title = anomalies.length ? "异常交易提醒" : "新的 TRC-20 交易";
+  const title = anomalies.length ? "异常交易提醒" : "";
   const body = lines.join("\n");
 
   await sendMail(title, body);
