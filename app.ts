@@ -250,7 +250,7 @@ async function sendTelegramOne(chatId: string, text: string) {
                 text: "查看交易详情",
                 url: `https://tronscan.org/#/transaction/${tx.id}`,
               },
-            ],
+            ]
           },
         }),
         signal: AbortSignal.timeout(15000),
