@@ -33,10 +33,8 @@ const ORDER_HEADERS = jsonEnv<Record<string, string>>("ORDER_HEADERS", {});
 const ORDER_NAME_REGEX = new RegExp(env("ORDER_NAME_REGEX") || "用户名[：:]\\s*(\\S+)");
 const ORDER_TIME_REGEX = new RegExp(env("ORDER_TIME_REGEX") || "时间[：:]\\s*(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})");
 
-// Resend
-const RESEND_API_KEY = env("RESEND_API_KEY");
-const MAIL_FROM = env("MAIL_FROM");
-const MAIL_TO = env("MAIL_TO").split(",").map((s) => s.trim()).filter(Boolean);
+const TG_BOT_TOKEN = env("TG_BOT_TOKEN");
+const TG_CHAT_IDS = env("TG_CHAT_IDS").split(",").map((s) => s.trim()).filter(Boolean);
 const IMPORT_TOKEN = env("IMPORT_TOKEN");
 
 const OFFICIAL_USDT_TRC20_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
@@ -232,25 +230,43 @@ async function lookupOrder(id: string): Promise<Order | null> {
   }
 }
 
-async function sendMail(title: string, body: string) {
-  if (!MAIL_TO.length || !RESEND_API_KEY) return;
+const redact = (s: unknown) =>
+  TELEGRAM_BOT_TOKEN ? String(s).replaceAll(TELEGRAM_BOT_TOKEN, "***") : String(s);
+
+async function sendTelegramOne(chatId: string, text: string) {
   for (let i = 1; i <= 3; i++) {
     try {
-      const r = await fetch("https://api.resend.com/emails", {
+      const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${RESEND_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ from: MAIL_FROM, to: MAIL_TO, subject: title, text: body }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          link_preview_options: { is_disabled: true },
+        }),
         signal: AbortSignal.timeout(15000),
       });
       if (r.ok) return;
-      throw new Error(`${r.status} ${await r.text()}`);
+      const j = await r.json().catch(() => ({}));
+      throw Object.assign(new Error(`${r.status} ${JSON.stringify(j)}`), {
+        wait: (j?.parameters?.retry_after ?? 0) * 1000,
+      });
     } catch (e) {
-      if (i === 3) throw e;
-      await sleep(2000);
+      console.log(`[Telegram ${chatId} 第 ${i}/3 次失败] ${redact(e)}`);
+      if (i === 3) throw new Error(redact(e));
+      await sleep(Math.min((e as { wait?: number }).wait || 2000, 10000));
     }
+  }
+}
+
+async function sendMail(title: string, body: string) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_IDS.length) return;
+  const text = `${title}\n\n${body}`.slice(0, 4000);
+  const results = await Promise.allSettled(
+    TELEGRAM_CHAT_IDS.map((id) => sendTelegramOne(id, text)),
+  );
+  if (results.every((r) => r.status === "rejected")) {
+    throw new Error("所有 Telegram 收件对象都发送失败");
   }
 }
 
