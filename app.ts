@@ -307,8 +307,8 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
     isNewUser ? `用户名：${esc(name)}  新用户` : `用户名：${esc(name)}`,
     `金额：${esc(amountStr(tx.value, tx.decimals) ?? tx.value)} ${esc(tx.symbol || "TOKEN")}`,
     `系统处理时间：${esc(order?.time ?? null)}`,
-    isFirstPayment ? `From：${esc(tx.from)}  首次付款` : `From：${esc(tx.from)}`,
-    `To：${esc(tx.to)}`,
+    isFirstPayment ? `From：<code>${esc(tx.from)}</code>  首次付款` : `From：<code>${esc(tx.from)}</code>`,
+    `To：<code>${esc(tx.to)}</code>`,
     `交易哈希：<code>${esc(tx.id)}</code>`,
     `转账时间： ${esc(trcTime)}`,
   );
