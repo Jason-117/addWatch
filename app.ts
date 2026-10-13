@@ -68,6 +68,9 @@ interface Pending {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const has = async (key: Deno.KvKey) => (await kv.get(key)).versionstamp !== null;
 
+const esc = (s: unknown) =>
+  String(s).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
 function fmtTs(ms: unknown): string | null {
   const n = Number(ms);
   if (!n) return null;
@@ -233,48 +236,53 @@ async function lookupOrder(id: string): Promise<Order | null> {
 const redact = (s: unknown) =>
   TELEGRAM_BOT_TOKEN ? String(s).replaceAll(TELEGRAM_BOT_TOKEN, "***") : String(s);
 
-async function sendTelegramOne(chatId: string, text: string) {
+// text 必须是已转义好的 HTML；txId 用于生成"查看交易详情"按钮
+async function sendTelegramOne(chatId: string, text: string, txId?: string) {
   for (let i = 1; i <= 3; i++) {
     try {
+      const payload: Record<string, unknown> = {
+        chat_id: chatId,
+        text,
+        link_preview_options: { is_disabled: true },
+        parse_mode: "HTML",
+      };
+      if (txId) {
+        payload.reply_markup = {
+          inline_keyboard: [
+            [
+              {
+                text: "查看交易详情",
+                url: `https://tronscan.org/#/transaction/${txId}`,
+              },
+            ],
+          ],
+        };
+      }
       const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: `交易哈希：<code>${tx.id}</code>`,
-          link_preview_options: { is_disabled: true },
-          parse_mode: "HTML",
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: "查看交易详情",
-                  url: `https://tronscan.org/#/transaction/${tx.id}`,
-                },
-              ],
-            ],
-          },
-        }),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(15000),
       });
       if (r.ok) return;
       const j = await r.json().catch(() => ({}));
       throw Object.assign(new Error(`${r.status} ${JSON.stringify(j)}`), {
         wait: (j?.parameters?.retry_after ?? 0) * 1000,
+        fatal: r.status >= 400 && r.status < 500 && r.status !== 429,
       });
     } catch (e) {
       console.log(`[Telegram ${chatId} 第 ${i}/3 次失败] ${redact(e)}`);
-      if (i === 3) throw new Error(redact(e));
+      if (i === 3 || (e as { fatal?: boolean }).fatal) throw new Error(redact(e));
       await sleep(Math.min((e as { wait?: number }).wait || 2000, 10000));
     }
   }
 }
 
-async function sendMail(title: string, body: string) {
+async function sendMail(title: string, body: string, txId?: string) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_IDS.length) return;
-  const text = `${title}\n\n${body}`.slice(0, 4000);
+  const text = (title ? `${title}\n\n${body}` : body).slice(0, 4000);
   const results = await Promise.allSettled(
-    TELEGRAM_CHAT_IDS.map((id) => sendTelegramOne(id, text)),
+    TELEGRAM_CHAT_IDS.map((id) => sendTelegramOne(id, text, txId)),
   );
   if (results.every((r) => r.status === "rejected")) {
     throw new Error("所有 Telegram 收件对象都发送失败");
@@ -292,22 +300,22 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
 
   const lines: string[] = [];
   if (anomalies.length) {
-    lines.push("检测到以下异常，请仔细核实，谨防诈骗：", ...anomalies, "");
+    lines.push("检测到以下异常，请仔细核实，谨防诈骗：", ...anomalies.map(esc), "");
   }
   lines.push(
-    `平台：${LABELS.get(watch) ?? "非监控地址"}`,
-    isNewUser ? `用户名：${name} 新用户` : `用户名：${name}`,
-    `金额：${amountStr(tx.value, tx.decimals) ?? tx.value} ${tx.symbol || "TOKEN"}`,
-    `系统处理时间：${order?.time ?? null}`,
-    isFirstPayment ? `From：${tx.from}  首次付款` : `From：${tx.from}`,
-    `To：${tx.to}`,
-    `交易哈希：${tx.id}`,
-    `转账时间： ${trcTime}`,
+    `平台：${esc(LABELS.get(watch) ?? "非监控地址")}`,
+    isNewUser ? `用户名：${esc(name)} 新用户` : `用户名：${esc(name)}`,
+    `金额：${esc(amountStr(tx.value, tx.decimals) ?? tx.value)} ${esc(tx.symbol || "TOKEN")}`,
+    `系统处理时间：${esc(order?.time ?? null)}`,
+    isFirstPayment ? `From：${esc(tx.from)}  首次付款` : `From：${esc(tx.from)}`,
+    `To：${esc(tx.to)}`,
+    `交易哈希：<code>${esc(tx.id)}</code>`,
+    `转账时间： ${esc(trcTime)}`,
   );
   const title = anomalies.length ? "异常交易提醒" : "";
   const body = lines.join("\n");
 
-  await sendMail(title, body);
+  await sendMail(title, body, tx.id);
 
   const op = kv.atomic();
   if (name && isNewUser) op.set(["user", name], 1);
