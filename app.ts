@@ -117,11 +117,7 @@ function isAuthorized(tx: Tx): boolean {
 function checkAnomalies(tx: Tx): string[] {
   const a: string[] = [];
   if (tx.symbol !== "USDT") {
-<<<<<<< HEAD
     a.push(`Token 符号异常：显示为「${tx.symbol}」，并非标准USDT，请高度警惕仿冒代币`);
-=======
-    a.push(`Token 异常：显示为「${tx.symbol}」，并非标准USDT，警惕仿冒`);
->>>>>>> b8f3439 (f)
   }
   if (tx.contract && tx.contract !== OFFICIAL_USDT_TRC20_CONTRACT) {
     a.push(
@@ -240,7 +236,6 @@ async function lookupOrder(id: string): Promise<Order | null> {
 const redact = (s: unknown) =>
   TELEGRAM_BOT_TOKEN ? String(s).replaceAll(TELEGRAM_BOT_TOKEN, "***") : String(s);
 
-// text 必须是已转义好的 HTML；txId 用于生成"查看交易详情"按钮
 async function sendTelegramOne(chatId: string, text: string, txId?: string) {
   for (let i = 1; i <= 3; i++) {
     try {
@@ -308,12 +303,7 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
   }
   lines.push(
     `<b>${esc(LABELS.get(watch) ?? "非监控地址")}</b>`,
-<<<<<<< HEAD
     isNewUser ? `用户名：${esc(name)}  新用户` : `用户名：${esc(name)}`,
-=======
-
-    isNewUser ? `用户名： ${esc(name)}  新用户` : `用户名： ${esc(name)}`,
->>>>>>> b8f3439 (f)
     `金额：${esc(amountStr(tx.value, tx.decimals) ?? tx.value)} ${esc(tx.symbol || "TOKEN")}`,
     `系统处理时间：${esc(order?.time ?? null)}`,
     isFirstPayment ? `From：<code>${esc(tx.from)}</code>  首次付款` : `From：<code>${esc(tx.from)}</code>`,
