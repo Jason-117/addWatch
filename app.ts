@@ -303,8 +303,8 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
     lines.push("检测到以下异常，请仔细核实，谨防诈骗：", ...anomalies.map(esc), "");
   }
   lines.push(
-    `平台：${esc(LABELS.get(watch) ?? "非监控地址")}`,
-    isNewUser ? `用户名：${esc(name)} 新用户` : `用户名：${esc(name)}`,
+    `<b>${esc(LABELS.get(watch) ?? "非监控地址")}</b>`,
+    isNewUser ? `用户名：${esc(name)}  新用户` : `用户名：${esc(name)}`,
     `金额：${esc(amountStr(tx.value, tx.decimals) ?? tx.value)} ${esc(tx.symbol || "TOKEN")}`,
     `系统处理时间：${esc(order?.time ?? null)}`,
     isFirstPayment ? `From：${esc(tx.from)}  首次付款` : `From：${esc(tx.from)}`,
