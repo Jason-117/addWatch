@@ -39,6 +39,7 @@ const IMPORT_TOKEN = env("IMPORT_TOKEN");
 
 const OFFICIAL_USDT_TRC20_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const OVERLAP_MS = 10 * 60 * 1000;
+const CURSOR_STEP_MS = 5 * 60 * 1000;
 const MAX_PENDING_TRIES = 5;
 const SEEN_TTL = 3 * 24 * 3600 * 1000;
 
@@ -323,39 +324,46 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
 }
 
 async function pollAddress(addr: string) {
+  const tickStart = Date.now();
   const cur = (await kv.get<number>(["cursor", addr])).value;
   if (cur == null) {
-    await kv.set(["cursor", addr], Date.now());
+    // 首次监控该地址：只设游标，不推送历史
+    await kv.set(["cursor", addr], tickStart);
+    console.log(`[初始化] ${addr} 游标已设置`);
     return;
   }
 
-  const txs = await fetchTransfers(addr, cur - OVERLAP_MS);
-  if (!txs.length) return;
+  const since = cur - OVERLAP_MS;
+  const all = await fetchTransfers(addr, since);
+  // TronScan 不一定理会 start_timestamp，这里本地再过滤一次，窗口外的旧交易一律忽略
+  const txs = all.filter((t) => t.ts != null && t.ts >= since);
 
-  const seenFlags = await Promise.all(txs.map((t) => has(["seen", t.id])));
-  const fresh = txs.filter((_, i) => !seenFlags[i]).reverse();
+  if (txs.length) {
+    const seenFlags = await Promise.all(txs.map((t) => has(["seen", t.id])));
+    const fresh = txs.filter((_, i) => !seenFlags[i]).reverse(); // 旧 -> 新
 
-  for (const tx of fresh) {
-    // 支出（From 为监控地址）不处理
-    if (tx.from === addr) {
+    for (const tx of fresh) {
+      // 支出（From 为监控地址）不处理
+      if (tx.from === addr) {
+        await kv.set(["seen", tx.id], 1, { expireIn: SEEN_TTL });
+        continue;
+      }
+      const anomalous = checkAnomalies(tx).length > 0;
+      const order = await lookupOrder(tx.id);
+
+      if (order || anomalous) {
+        await notify(tx, addr, order); // 失败会抛错 -> 不标记 seen，游标也不前进，下个周期重试
+      } else {
+        await kv.set(["pending", tx.id], { tx, addr, tries: 1 } as Pending, {
+          expireIn: 3600 * 1000,
+        });
+      }
       await kv.set(["seen", tx.id], 1, { expireIn: SEEN_TTL });
-      continue;
     }
-    const anomalous = checkAnomalies(tx).length > 0;
-    const order = await lookupOrder(tx.id);
-
-    if (order || anomalous) {
-      await notify(tx, addr, order);
-    } else {
-      await kv.set(["pending", tx.id], { tx, addr, tries: 1 } as Pending, {
-        expireIn: 3600 * 1000,
-      });
-    }
-    await kv.set(["seen", tx.id], 1, { expireIn: SEEN_TTL });
   }
 
-  const maxTs = Math.max(cur, ...txs.map((t) => t.ts ?? 0));
-  if (maxTs > cur) await kv.set(["cursor", addr], maxTs);
+  // 游标 = 本轮开始时间（不是最后一笔交易的时间），没有新交易时也要前进
+  if (tickStart - cur >= CURSOR_STEP_MS) await kv.set(["cursor", addr], tickStart);
 }
 
 async function processPending() {
