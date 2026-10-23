@@ -335,7 +335,6 @@ async function pollAddress(addr: string) {
 
   const since = cur - OVERLAP_MS;
   const all = await fetchTransfers(addr, since);
-  // TronScan 不一定理会 start_timestamp，这里本地再过滤一次，窗口外的旧交易一律忽略
   const txs = all.filter((t) => t.ts != null && t.ts >= since);
 
   if (txs.length) {
@@ -352,7 +351,7 @@ async function pollAddress(addr: string) {
       const order = await lookupOrder(tx.id);
 
       if (order || anomalous) {
-        await notify(tx, addr, order); // 失败会抛错 -> 不标记 seen，游标也不前进，下个周期重试
+        await notify(tx, addr, order); 
       } else {
         await kv.set(["pending", tx.id], { tx, addr, tries: 1 } as Pending, {
           expireIn: 3600 * 1000,
@@ -362,7 +361,6 @@ async function pollAddress(addr: string) {
     }
   }
 
-  // 游标 = 本轮开始时间（不是最后一笔交易的时间），没有新交易时也要前进
   if (tickStart - cur >= CURSOR_STEP_MS) await kv.set(["cursor", addr], tickStart);
 }
 
