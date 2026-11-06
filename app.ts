@@ -36,7 +36,12 @@ const ORDER_TIME_REGEX = new RegExp(env("ORDER_TIME_REGEX") || "时间[：:]\\s*
 const TELEGRAM_BOT_TOKEN = env("TG_BOT_TOKEN");
 const TELEGRAM_CHAT_IDS = env("TG_CHAT_IDS").split(",").map((s) => s.trim()).filter(Boolean);
 const IMPORT_TOKEN = env("IMPORT_TOKEN");
-const ADMIN_UserName = (env("ADMIN_UserName")??"");
+const ADMIN_UserName = (env("ADMIN_UserName")??"") 
+  .split(/[,\s]+/)
+  .map((s) => s.replace(/^@/,""))
+  .filter(Boolean)
+  .map((s) => `@${s}`)
+  .join("  ");;
 
 const OFFICIAL_USDT_TRC20_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const OVERLAP_MS = 10 * 60 * 1000;
@@ -298,12 +303,6 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
   const isFirstPayment = incoming && !(await has(["sender", watch, tx.from]));
   const name = order?.name ?? null;
   const isNewUser = !!name && !(await has(["user", name]));
-  const adminUser = ADMIN_UserName
-    .split(/[,\s]+/)
-    .map((s) => s.replace(/^@/,""))
-    .filter(Boolean)
-    .map((s) => `@${s}`)
-    .join("  ");
 
   const lines: string[] = [];
   if (anomalies.length) {
@@ -319,7 +318,7 @@ async function notify(tx: Tx, watch: string, order: Order | null) {
     `交易哈希：<code>${esc(tx.id)}</code>`,
     `转账时间： ${esc(trcTime)}`,
   );
-  const title = anomalies.length ? ["异常交易提醒", adminUser].filter(Boolean).join(" ") : "";
+  const title = anomalies.length ? ["异常交易提醒", ADMIN_UserName].filter(Boolean).join(" ") : "";
   const body = lines.join("\n");
 
   await sendMail(title, body, tx.id);
